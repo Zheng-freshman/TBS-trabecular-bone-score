@@ -98,6 +98,38 @@ def dFun(p, x):
     return 2*a1*x+a2
 def error(p,x,y):
     return Fun(p,x)-y
+def TBS_fit(V, fun="origin"): #拟合x=lg(k)且1<k<10的曲线，得到x=0时的斜率，即TBS的值
+    """
+    :V 
+    :fun origin--TBS of origin paper; untreat--base of log is not k=1 num
+    """
+    #x_axis = np.array([math.log10(k+1) for k in range(0, k_max)])
+    zeroNum = 0
+    if(V[0]==0):
+        V_noZero = V
+        while(V_noZero[0]==0):
+            zeroNum += 1
+            V_noZero = V_noZero[1:]
+        V_log = torch.log1p(V_noZero)
+    else:
+        V_log = torch.log1p(V)
+    x_axis = np.array([k for k in range(0, k_max-zeroNum)])
+
+    if fun=="origin":
+        y_axis = V_log / V_log.tolist()[0] #以第一个数为底
+    elif fun=="untreat":
+        y_axis = V_log
+    else:
+        y_axis = V_log
+    y_axis = y_axis.numpy()
+    #print(x_axis)
+    #print(y_axis)
+    p0 = [0.1, -0.01, 100]
+    para = leastsq(error, p0, args=(x_axis, y_axis), maxfev=5000)
+    y_fitted = Fun(para[0], x_axis)
+    tbs_value = dFun(para[0], 0)
+    if np.isnan(tbs_value): print(V_noZero)
+    return tbs_value, x_axis, y_axis, y_fitted
 
 def tbs_per(image, savepath, savename, mask=None):
     #img = cv2.resize(img, dsize=None, fx=0.5, fy=0.5)
@@ -108,7 +140,6 @@ def tbs_per(image, savepath, savename, mask=None):
     height = gray_img.size(0)
     width = gray_img.size(1)
     print("img ready")
-    x_axis = np.array([math.log10(k+1) for k in range(0, k_max)])
 
     V_lines = []
     V_img = torch.zeros(k_max, height, width)
@@ -141,23 +172,12 @@ def tbs_per(image, savepath, savename, mask=None):
     axs[0].plot(np.array([(k+1) for k in range(0, k_max)]), V_mean, 'r', label = 'orgin')
     axs[0].legend()
 
-    #print(V_mean)
-    V_log = torch.log1p(V_mean)
-    y_axis = V_log / V_log.tolist()[0]
-    y_axis = y_axis.numpy()
-    #print(x_axis)
-    #print(y_axis)
-
-    print("fitting")
-    p0 = [0.1, -0.01, 100]
-    para = leastsq(error, p0, args=(x_axis, y_axis))
+    tbs_value, x_axis, y_axis, y_fitted = TBS_fit(V_mean, "origin")
     axs[1].plot(x_axis, y_axis, 'r', label = 'orgin')
-    y_fitted = Fun(para[0], x_axis)
     axs[1].plot(x_axis, y_fitted, 'b', label = 'fitted')
     axs[1].legend()
     #plt.show()
     plt.savefig(os.path.join(savepath,savename), bbox_inches='tight')
-    tbs_value = dFun(para[0], 0)
     #print(para[0])
     print(filename+": "+str(tbs_value))
 
